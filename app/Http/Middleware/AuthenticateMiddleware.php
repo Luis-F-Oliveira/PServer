@@ -3,14 +3,12 @@
 namespace App\Http\Middleware;
 
 use Closure;
-use App\Models\RoleOnUser;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cookie;
-use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
 
-class Permissions
+class AuthenticateMiddleware
 {
     /**
      * Handle an incoming request.
@@ -19,22 +17,23 @@ class Permissions
      */
     public function handle(Request $request, Closure $next): Response
     {
-        $user = Auth::user();
+        if (!Auth::check()) {
+            $response = response()->json([
+                'message' => 'Unauthorized'
+            ], 401);
 
-        $roles = RoleOnUser::where('user_id', $user->id)->with('role')->get();
-        $currentRoles = $roles->pluck('role.name', 'role.key')->toArray();
+            $response->headers->setCookie(Cookie::forget('jwt'));
+            return $response;
+        }
 
         $response = $next($request);
+        $cookie = cookie('jwt', httpOnly:false);
 
         if ($response instanceof \Illuminate\Http\JsonResponse) {
             $response = response()->make($response->getContent(), $response->status());
         }
 
-        foreach ($currentRoles as $key => $value) {
-            $cookie = cookie($value, $key, 60 * 24, null, null, false, false);
-            $response->headers->setCookie($cookie);
-        }
-
+        $response->headers->setCookie($cookie);
         return $response;
     }
 }
